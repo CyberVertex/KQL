@@ -1,0 +1,58 @@
+//This query retrieves changes to CA policies from the AuditLog table by converting the JSON data to a string and comparing the old and new values.
+// Please be aware that the FlattenJSON function is hardcoded to handle up to 5 levels and may need to be updated if Microsoft introduces additional features.
+let FlattenJSON = (JSONString:string) {
+    AuditLogs
+    | where OperationName in~("Update conditional access policy")
+    | extend JSON = case(
+            JSONString contains "New", tostring((TargetResources[0].modifiedProperties)[0].newValue),
+            tostring((TargetResources[0].modifiedProperties)[0].oldValue))
+    | extend JSON = replace_regex(JSON, @"\+00:00", "")
+    | extend JSON = parse_json(JSON)
+    | mv-expand Layer0Key = (bag_keys(JSON))                                            
+    | extend Layer0Key = tostring(Layer0Key)
+    | mv-expand Layer1Key = bag_keys(JSON[Layer0Key])                                   
+    | extend Layer1Key = tostring(Layer1Key)
+    | mv-expand Layer2Key = bag_keys(JSON[Layer0Key][Layer1Key])                        
+    | extend Layer2Key = tostring(Layer2Key)
+    | mv-expand Layer3Key = bag_keys(JSON[Layer0Key][Layer1Key][Layer2Key])
+    | extend Layer3Key = tostring(Layer3Key)
+    | mv-expand Layer4Key = bag_keys(JSON[Layer0Key][Layer1Key][Layer2Key][Layer3Key])  
+    | extend Layer4Key = tostring(Layer4Key)
+    | extend Layer0Value = JSON
+    | extend Layer1Value = JSON[Layer0Key]
+    | extend Layer2Value = JSON[Layer0Key][Layer1Key]
+    | extend Layer3Value = JSON[Layer0Key][Layer1Key][Layer2Key]
+    | extend Layer4Value = JSON[Layer0Key][Layer1Key][Layer2Key][Layer3Key]
+    | extend value = case(
+            gettype(Layer0Value) != "dictionary", Layer0Value,
+            gettype(Layer1Value) != "dictionary", Layer1Value,
+            gettype(Layer2Value) != "dictionary", Layer2Value,
+            gettype(Layer3Value) != "dictionary", Layer3Value,
+            Layer4Value)
+    | extend KeyHierarchy = strcat(
+            Layer0Key,
+            iff(isnotempty(Layer1Key), strcat('.', Layer1Key), ""),
+            iff(isnotempty(Layer2Key), strcat('.', Layer2Key), ""),
+            iff(isnotempty(Layer3Key), strcat('.', Layer3Key), ""),
+            iff(isnotempty(Layer4Key), strcat('.', Layer4Key), ""))
+    | extend newValue = case(JSONString contains "New", value, "")
+    | extend oldValue = case(JSONString contains "Old", value, "")
+};
+////////////////////////////////////////////////////////////////////////
+union FlattenJSON("New"), FlattenJSON("Old")
+    | extend oldValue = todynamic(oldValue)
+    | extend newValue = todynamic(newValue)
+    | extend InitiatedBy = tostring(InitiatedBy.user.userPrincipalName)
+    | extend policy = tostring(TargetResources[0].displayName)
+    | summarize OldFinalValue = make_list(oldValue), NewFinalValue = make_list(newValue) by CorrelationId, KeyHierarchy, TimeGenerated, OperationName, Result, InitiatedBy, policy
+    | where tostring(NewFinalValue) != tostring(OldFinalValue)
+    | extend ChangesToNew = set_difference(NewFinalValue, OldFinalValue)
+    | extend ChangesToOld = set_difference(OldFinalValue, NewFinalValue)
+    | extend Changes = case(
+            array_length(ChangesToOld) > 0 and array_length(ChangesToNew) == 0, strcat("Removed: ", tostring(ChangesToOld), " from: ", tostring(KeyHierarchy)),
+            array_length(ChangesToNew) > 0 and array_length(ChangesToOld) == 0, strcat("Added: ", tostring(ChangesToNew), " to: ", tostring(KeyHierarchy)),
+            array_length(ChangesToNew) > 0 and array_length(ChangesToOld) > 0, strcat("Changed: From ", tostring(ChangesToOld), " to ", tostring(ChangesToNew), " on: ", tostring(KeyHierarchy)),
+            "No Change"
+    )
+    | where KeyHierarchy <> "modifiedDateTime"
+    | project-away ChangesToNew, ChangesToOld, KeyHierarchy, Result, OldFinalValue, NewFinalValue

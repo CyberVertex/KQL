@@ -1,0 +1,15 @@
+// Determine whether an IP address is linked to a service tag or service by consulting the Microsoft Azure IP Ranges JSON.
+// Azure IP Ranges and Service Tags – Public Cloud - https://www.microsoft.com/en-us/download/details.aspx?id=56519
+// Download the JSON file, store it in an Azure Storage account, create a SAS token, and then update the following code.
+let AzureIPRanges = (externaldata(changeNumber:string, cloud:string, values: dynamic)
+[@"<Update me! with the ServiceTags.json Azure Storage SAS URL!!"]
+with (format="multijson"));
+AzureIPRanges
+    | mv-expand values
+    | extend addressPrefixes = parse_json(parse_json(values).properties).addressPrefixes
+    | extend name = parse_json(values).name
+    | project name, addressPrefixes
+    | mv-expand addressPrefixes
+    | where addressPrefixes contains "." //Filter to IPv4
+| extend result = ipv4_is_match(tostring(addressPrefixes), "40.126.63.192")
+| where result == true

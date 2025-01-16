@@ -1,0 +1,24 @@
+// Tracks daily unique devices sending DNS logs to ASimDnsActivityLogs and compares them with heartbeat logs. This helps identify potential issues with connectivity or the DNS agent.
+let start_date = ago(30d);
+let end_date = ago(0d);
+// Step 1: Get distinct list of active device names from ASimDnsActivityLogs
+let DNSActiveComputers = toscalar(ASimDnsActivityLogs 
+    | where TimeGenerated between (start_date .. end_date)
+    | distinct _ResourceId 
+    | summarize make_list(tolower(_ResourceId)));
+// Step 2: Compare list from DNSActiveComputers against heartbeats
+let DNSHeartbeatTrend = Heartbeat
+    | where TimeGenerated between (start_date .. end_date)
+    | where set_has_element(DNSActiveComputers, tolower(_ResourceId))
+    | summarize count() by Computer, bin(TimeGenerated, 1d)
+    | summarize count() by bin(TimeGenerated, 1d)
+    | extend Trend = "Device Heartbeats";
+// Step 3: Trend unqiue devices sending DNS logs
+let DNSLogTrend = ASimDnsActivityLogs
+    | where TimeGenerated between (start_date .. end_date)
+    | summarize count() by _ResourceId, bin(TimeGenerated, 1d)
+    | summarize count() by bin(TimeGenerated, 1d)
+    | extend Trend = "Device DNSLogs";
+// Step 4: Graph DNSLogTrend vs DNSHeartbeatTrend
+union DNSHeartbeatTrend, DNSLogTrend
+    | render timechart

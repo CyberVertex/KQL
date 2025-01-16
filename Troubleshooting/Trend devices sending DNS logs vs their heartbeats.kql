@@ -10,7 +10,7 @@ let DNSActiveComputers = toscalar(ASimDnsActivityLogs
 let DNSHeartbeatTrend = Heartbeat
     | where TimeGenerated between (start_date .. end_date)
     | where set_has_element(DNSActiveComputers, tolower(_ResourceId))
-    | summarize count() by Computer, bin(TimeGenerated, 1d)
+    | summarize count() by _ResourceId, bin(TimeGenerated, 1d)
     | summarize count() by bin(TimeGenerated, 1d)
     | extend Trend = "Device Heartbeats";
 // Step 3: Trend unqiue devices sending DNS logs

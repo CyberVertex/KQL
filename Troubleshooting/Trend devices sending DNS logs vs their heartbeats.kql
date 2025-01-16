@@ -1,4 +1,4 @@
-// Tracks daily unique devices sending DNS logs to ASimDnsActivityLogs and compares them with heartbeat logs. This helps identify potential issues with connectivity or the DNS agent.
+// Trend and graph daily unique devices sending DNS logs to ASimDnsActivityLogs and compares them with heartbeat logs. This helps identify potential issues with connectivity or the DNS agent.
 let start_date = ago(30d);
 let end_date = ago(0d);
 // Step 1: Get distinct list of active device names from ASimDnsActivityLogs

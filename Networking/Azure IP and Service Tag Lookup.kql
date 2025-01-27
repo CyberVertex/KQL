@@ -2,7 +2,7 @@
 // Azure IP Ranges and Service Tags – Public Cloud - https://www.microsoft.com/en-us/download/details.aspx?id=56519
 // Download the JSON file, store it in an Azure Storage account, create a SAS token, and then update the following code.
 let AzureIPRanges = (externaldata(changeNumber:string, cloud:string, values: dynamic)
-[@"<Update me! with the ServiceTags.json Azure Storage SAS URL!!"]
+[@"https://download.microsoft.com/download/7/1/D/71D86715-5596-4529-9B13-DA13A5DE5B63/ServiceTags_Public_20250120.json"]
 with (format="multijson"));
 AzureIPRanges
     | mv-expand values
